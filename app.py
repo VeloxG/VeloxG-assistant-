@@ -1,15 +1,13 @@
 import os
 from flask import Flask, request, jsonify
-from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration
+from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
-# Detect GPU (but Render free tier ni CPU only)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Tumia model ndogo ili kupunguza memory
-model_name = "facebook/blenderbot-90M"
-tokenizer = BlenderbotTokenizer.from_pretrained(model_name)
-model = BlenderbotForConditionalGeneration.from_pretrained(model_name).to(device)
+model_name = "microsoft/DialoGPT-small"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name).to(device)
 
 app = Flask(__name__)
 
@@ -29,11 +27,10 @@ def chat():
     if not user_input:
         return jsonify({"error": "No message provided"}), 400
 
-    # Disable gradient calculation to save memory
     with torch.no_grad():
-        inputs = tokenizer([user_input], return_tensors="pt").to(device)
-        reply_ids = model.generate(**inputs, max_length=100, num_beams=5, early_stopping=True)
-        response = tokenizer.decode(reply_ids[0], skip_special_tokens=True)
+        inputs = tokenizer.encode(user_input + tokenizer.eos_token, return_tensors="pt").to(device)
+        reply_ids = model.generate(inputs, max_length=60, pad_token_id=tokenizer.eos_token_id)
+        response = tokenizer.decode(reply_ids[:, inputs.shape[-1]:][0], skip_special_tokens=True)
 
     return jsonify({"reply": response})
 
