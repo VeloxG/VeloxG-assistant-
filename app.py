@@ -1,39 +1,44 @@
-import os
 from flask import Flask, request, jsonify
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-model_name = "microsoft/DialoGPT-small"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(model_name).to(device)
 
 app = Flask(__name__)
 
-@app.route('/')
+# Model ndogo
+MODEL_NAME = "microsoft/DialoGPT-small"
+
+# Load model na tokenizer mara moja tu wakati app inaanza
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
+
+# Chagua CPU kwa sababu Render free tier haina GPU
+device = torch.device("cpu")
+model.to(device)
+
+@app.route("/", methods=["GET"])
 def home():
-    return jsonify({
-        "status": "Server running ✅",
-        "endpoint": "/chat",
-        "model": model_name
-    })
+    return jsonify({"message": "Chatbot is running on Render free tier!"})
 
-@app.route('/chat', methods=['POST'])
+@app.route("/chat", methods=["POST"])
 def chat():
-    data = request.get_json(force=True)
-    user_input = data.get("message", "").strip()
+    try:
+        data = request.get_json()
+        message = data.get("message", "")
 
-    if not user_input:
-        return jsonify({"error": "No message provided"}), 400
+        if not message:
+            return jsonify({"error": "Message is required"}), 400
 
-    with torch.no_grad():
-        inputs = tokenizer.encode(user_input + tokenizer.eos_token, return_tensors="pt").to(device)
-        reply_ids = model.generate(inputs, max_length=60, pad_token_id=tokenizer.eos_token_id)
-        response = tokenizer.decode(reply_ids[:, inputs.shape[-1]:][0], skip_special_tokens=True)
+        # Tokenize input
+        inputs = tokenizer.encode(message + tokenizer.eos_token, return_tensors="pt").to(device)
 
-    return jsonify({"reply": response})
+        # Generate response
+        outputs = model.generate(inputs, max_length=100, pad_token_id=tokenizer.eos_token_id)
+        reply = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+        return jsonify({"reply": reply})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    # Render inahitaji host='0.0.0.0'
+    app.run(host="0.0.0.0", port=5000)
